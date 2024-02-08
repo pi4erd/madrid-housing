@@ -14,7 +14,7 @@ REQUEST_LIMIT = 1000
 current_requests = 0
 
 def get_location_google(address: str, api_key) -> dict[str, float] | None:
-    print("Google LOC is disable for the time being")
+    print("Google LOC is disabled for the time being (in order to not accidentally put myself in debt)")
     return None
     
     global current_requests
@@ -41,7 +41,7 @@ def get_location_google(address: str, api_key) -> dict[str, float] | None:
     except KeyError:
         return None
 
-def get_location(address, api_key) -> tuple[float, float] | None:
+def get_location(address, api_key) -> dict[str, float] | None:
     global current_requests
     
     if current_requests >= REQUEST_LIMIT:
@@ -53,25 +53,35 @@ def get_location(address, api_key) -> tuple[float, float] | None:
     current_requests += 1
     
     req_params = {'apikey': api_key, 'q': address + " Madrid, Spain"}
-    response = requests.get(url=URL, params=req_params).json()
+    try:
+        response = requests.get(url=URL, params=req_params).json()
+    except ConnectionError:
+        return None
     
     try:
         if len(response['items']) == 0:
             return None
+        position = response['items'][0]['position']
     except KeyError:
         print(response)
         return None
     
-    position = response['items'][0]['position']
-    
-    return (position['lat'], position['lng'])
+    return {'lat': position['lat'], 'lng': position['lng']}
+
+def transform_location_to_format(location) -> dict[str, float]:
+    if isinstance(location, list):
+        return {'lat': location[0], 'lng': location[1]}
+    elif isinstance(location, dict):
+        return location
+    raise ValueError("Invalid location type")
 
 df_houses = pd.read_csv("houses_Madrid.csv")
 
 df_unique_districts = df_houses['neighborhood_id'].unique()
 
 df_streets = df_houses['street_name'] + ', ' + df_houses['street_number'].astype(str)
-df_streets_unique = df_streets.unique()
+# not '.unique', because I want to retain indices
+df_streets_unique = df_streets.drop_duplicates()
 
 neighborhood_locations = {}
 street_locations = {}
@@ -84,6 +94,10 @@ try:
 except FileNotFoundError:
     pass
 
+# fix location's data
+for location_info in street_locations.values():
+    location_info['loc'] = transform_location_to_format(location_info['loc'])
+    
 try:
     answer = input("Are you sure you want to lose money? (yes/no): ")
     
@@ -91,12 +105,13 @@ try:
         print("Smart choice...")
         exit(0)
     """
+    # Code for neighborhoods
     print("Loading neighborhoods")
     for neighborhood in df_unique_districts:
         neighborhood_locations[neighborhood] = get_location(neighborhood, API_KEY)
         print(f"Loaded {neighborhood}")
     """
-    for idx, street in enumerate(df_streets_unique, start=1):
+    for idx, street in df_streets_unique.items():
         if not isinstance(street, str):
             print(f"({idx}) Skipped {street}")
             continue
@@ -108,6 +123,7 @@ try:
         # if street already loaded, skip
         if street in street_locations.keys():
             print(f"({idx}) Skipped {street}")
+            #street_locations[street]['idx'] = idx
             continue
         
         try:
@@ -115,16 +131,18 @@ try:
             if loc is None:
                 print(f"({idx}) Failed to get location of {street}. Skipping...")
                 continue
-            street_locations[street] = loc
+            street_locations[street] = {'loc': loc, 'idx': idx}
         except KeyError:
             print(f"({idx}) Failed to get location of {street}. Skipping...")
             continue
         print(f"({idx}) Loaded {street}")
 except KeyboardInterrupt:
     # Stop loading after keyboard interrupt and just proceed to saving
-    print("Further API queries are cancelled")
-
-print("Finished loading")
+    print("Further API queries are cancelled.")
+except Exception as e: # I should've done this sooner
+    print(f"Error occured: {e}")
+finally:
+    print("Finished loading")
 
 with open(SAVE_FILE, "w") as f:
     f.write(json.dumps(street_locations))
