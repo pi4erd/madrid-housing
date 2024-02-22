@@ -49,6 +49,7 @@ python-dotenv==1.0.1
 pytz==2024.1
 pyzmq==25.1.2
 requests==2.31.0
+seaborn==0.13.2
 setuptools==69.1.0
 shapely==2.0.2
 six==1.16.0
