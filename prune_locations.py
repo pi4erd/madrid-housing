@@ -3,6 +3,7 @@
 
 from math import sqrt
 import json
+import re
 
 CENTER = {"lat": 40.43058270719132, "lng": -3.696461859683753}
 LIMIT_POINT = {"lat": 40.36802875457529, "lng": -4.158458115221}
@@ -25,7 +26,7 @@ for street in street_locations:
         print(f"Pruning {street} ({street_locations[street]['loc']})")
         answer = input("Are you sure (yes/no): ")
         
-        if answer == 'yes':
+        if re.match(r"y(?:es|)", answer, re.IGNORECASE) is not None :
             print(f"Pruned {street} ({street_locations[street]['loc']})")
             continue
         print(f"Skipped pruning {street} ({street_locations[street]['loc']})")
